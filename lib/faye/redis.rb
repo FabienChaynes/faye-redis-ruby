@@ -3,7 +3,6 @@ require 'multi_json'
 
 module Faye
   class Redis
-
     DEFAULT_HOST     = 'localhost'
     DEFAULT_PORT     = 6379
     DEFAULT_DATABASE = 0
@@ -169,7 +168,7 @@ module Faye
         @subscriber = connection.pubsub
 
         @subscriber.on(:connected) do
-          # @subscriber.client('setname', "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
+          @subscriber.client('setname', "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
         end
 
         @message_channel = @ns + '/notifications/messages'
@@ -185,17 +184,20 @@ module Faye
         @gc = EventMachine.add_periodic_timer(gc, &method(:gc))
         @subscriber.on(:failed) do
           @server.error "Faye::Redis: redis connection failed"
+          connection.pubsub.close_connection
           @redis = nil
         end
+
         connection.on(:failed) do
           @server.error "Faye::Redis: redis connection failed"
+          connection.close_connection
           @redis = nil
         end
         connection.on(:disconnected) do
           @server.info "Faye::Redis: redis disconnected"
         end
         connection.on(:connected) do
-          # @redis.client('setname', "faye-server/#{@ns}[#{Socket.gethostname}][#{Process.pid}]")
+          connection.client('setname', "faye-server/#{@ns}[#{Socket.gethostname}][#{Process.pid}]")
           @server.info "Faye::Redis: redis connected"
         end
        connection.on(:reconnected) do
