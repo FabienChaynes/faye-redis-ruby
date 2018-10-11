@@ -17,7 +17,6 @@ module Faye
     def initialize(server, options)
       @server  = server
       @options = options
-      EventMachine::Hiredis.logger.level = Logger::DEBUG
 
       init if EventMachine.reactor_running?
     end
@@ -34,23 +33,21 @@ module Faye
       @ns    = @options[:namespace] || ''
       socket = @options[:socket]    || nil
 
-      if uri
-        @redis = EventMachine::Hiredis.connect(uri)
+      @redis = if uri
+        EventMachine::Hiredis.connect(uri)
       elsif socket
-        @redis = EventMachine::Hiredis::Client.new(socket, nil, auth, db).connect
+        EventMachine::Hiredis::Client.new(socket, nil, auth, db).connect
       else
-        @redis = EventMachine::Hiredis::Client.new(host, port, auth, db).connect
+        EventMachine::Hiredis::Client.new(host, port, auth, db).connect
       end
-      @redis.on(:connected) do
-        @redis.client('setname', "faye-server/#{@ns}[#{Socket.gethostname}][#{Process.pid}]")
-      end
+
       @redis.errback do |reason|
-        raise "Connection to redis failed : #{reason}"
+        @server.error "Faye::Redis: redis connection failed: #{reason}"
       end
       @subscriber = @redis.pubsub
 
       @subscriber.on(:connected) do
-        @subscriber.client('setname', "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
+        # @subscriber.client('setname', "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
       end
 
       @message_channel = @ns + '/notifications/messages'
@@ -76,6 +73,7 @@ module Faye
         @server.info "Faye::Redis: redis disconnected"
       end
       @redis.on(:connected) do
+        # @redis.client('setname', "faye-server/#{@ns}[#{Socket.gethostname}][#{Process.pid}]")
         @server.info "Faye::Redis: redis connected"
       end
       @redis.on(:reconnected) do
