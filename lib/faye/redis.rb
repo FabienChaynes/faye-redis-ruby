@@ -67,17 +67,13 @@ module Faye
       @subscriber.on(:failed) do
         @server.error "Faye::Redis: redis connection failed"
         @redis = nil
-        raise "Could not connect to redis"
       end
       @redis.on(:failed) do
         @server.error "Faye::Redis: redis connection failed"
         @redis = nil
-        raise "Could not connect to redis"
       end
       @redis.on(:disconnected) do
         @server.info "Faye::Redis: redis disconnected"
-        @redis = nil
-        abort('disconnected from redis')
       end
       @redis.on(:connected) do
         @server.info "Faye::Redis: redis connected"
