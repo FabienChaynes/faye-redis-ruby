@@ -16,6 +16,7 @@ module Faye
     def initialize(server, options)
       @server  = server
       @options = options
+      redis
     end
 
     def disconnect
@@ -162,49 +163,57 @@ module Faye
           EventMachine::Hiredis::Client.new(host, port, auth, db).connect
         end
 
-        connection.errback do |reason|
-          @server.error "Faye::Redis: redis connection failed: #{reason}"
-        end
-        @subscriber = connection.pubsub
-
-        @subscriber.on(:connected) do
-          @subscriber.client('setname', "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
-        end
-
         @message_channel = @ns + '/notifications/messages'
         @close_channel   = @ns + '/notifications/close'
 
+        @gc = EventMachine.add_periodic_timer(gc, &method(:gc))
+        @subscriber = connection.pubsub
         @subscriber.subscribe(@message_channel)
         @subscriber.subscribe(@close_channel)
         @subscriber.on(:message) do |topic, message|
           empty_queue(message) if topic == @message_channel
           @server.trigger(:close, message) if topic == @close_channel
         end
-
-        @gc = EventMachine.add_periodic_timer(gc, &method(:gc))
+        @subscriber.on(:connected) do
+          @subscriber.client('setname', "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
+          @server.info "Faye::Redis: redis pubsub connection connected"
+        end
+        @subscriber.on(:disconnected) do
+          @server.info "Faye::Redis: redis pubsub connection disconnected"
+        end
+       @subscriber.on(:reconnected) do
+          @server.info "Faye::Redis: redis pubsub connection reconnected"
+        end
+        @subscriber.on(:reconnect_failed) do |count|
+          @server.info "Faye::Redis: redis pubsub connection reconnect failed (#{count}/4)"
+        end
         @subscriber.on(:failed) do
-          @server.error "Faye::Redis: redis connection failed"
-          connection.pubsub.close_connection
-          @redis = nil
+          @server.error "Faye::Redis: redis pubsub connection failed"
+          EM.add_timer(EM::Hiredis.reconnect_timeout) { @subscriber.reconnect! }
+        end
+        @subscriber.errback do |reason|
+          @server.error "Faye::Redis: redis pubsub connection failed: #{reason}"
         end
 
-        connection.on(:failed) do
-          @server.error "Faye::Redis: redis connection failed"
-          connection.close_connection
-          @redis = nil
-        end
-        connection.on(:disconnected) do
-          @server.info "Faye::Redis: redis disconnected"
-        end
         connection.on(:connected) do
           connection.client('setname', "faye-server/#{@ns}[#{Socket.gethostname}][#{Process.pid}]")
-          @server.info "Faye::Redis: redis connected"
+          @server.info "Faye::Redis: redis connection connected"
+        end
+        connection.on(:disconnected) do
+          @server.info "Faye::Redis: redis connection disconnected"
         end
        connection.on(:reconnected) do
-          @server.info "Faye::Redis: redis reconnected"
+          @server.info "Faye::Redis: redis connection reconnected"
         end
         connection.on(:reconnect_failed) do |count|
-          @server.info "Faye::Redis: redis reconnect failed (#{count}/4)"
+          @server.info "Faye::Redis: redis connection reconnect failed (#{count}/4)"
+        end
+        connection.on(:failed) do
+          @server.error "Faye::Redis: redis connection failed"
+          EM.add_timer(EM::Hiredis.reconnect_timeout) { connection.reconnect! }
+        end
+        connection.errback do |reason|
+          @server.error "Faye::Redis: redis connection failed: #{reason}"
         end
         connection
       end if EventMachine.reactor_running?
