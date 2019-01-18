@@ -120,7 +120,7 @@ module Faye
           redis.publish(@message_channel, client_id)
 
           client_exists(client_id) do |exists|
-            redis.del(queue) unless exists
+            destroy_client(client_id) unless exists
           end
         end
       end
@@ -269,4 +269,3 @@ module Faye
 
   end
 end
-
