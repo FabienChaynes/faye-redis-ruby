@@ -149,13 +149,14 @@ module Faye
 
     def redis
       @redis ||= begin
-        uri    = @options[:uri]       || nil
-        host   = @options[:host]      || DEFAULT_HOST
-        port   = @options[:port]      || DEFAULT_PORT
-        db     = @options[:database]  || DEFAULT_DATABASE
-        auth   = @options[:password]  || nil
-        gc     = @options[:gc]        || DEFAULT_GC
-        socket = @options[:socket]    || nil
+        uri              = @options[:uri]              || nil
+        host             = @options[:host]             || DEFAULT_HOST
+        port             = @options[:port]             || DEFAULT_PORT
+        db               = @options[:database]         || DEFAULT_DATABASE
+        auth             = @options[:password]         || nil
+        gc               = @options[:gc]               || DEFAULT_GC
+        socket           = @options[:socket]           || nil
+        inactivity_check = @options[:inactivity_check] || {}
 
         connection = if uri
           EventMachine::Hiredis.connect(uri)
@@ -175,6 +176,11 @@ module Faye
         end
         register_connection_listeners('pubsub', @subscriber, "faye-server/#{@ns}/pubsub[#{Socket.gethostname}][#{Process.pid}]")
         register_connection_listeners('redis', connection, "faye-server/#{@ns}[#{Socket.gethostname}][#{Process.pid}]")
+        if inactivity_check_enabled?(inactivity_check)
+          @server.info "Faye::Redis: Configuring inactivity check for redis connection and pubsub with trigger_secs=#{inactivity_check[:trigger_secs]} and response_timeout=#{inactivity_check[:response_timeout]}"
+          configure_inactivity_check(connection, inactivity_check)
+          configure_inactivity_check(@subscriber, inactivity_check)
+        end
 
         connection
       end
@@ -206,6 +212,14 @@ module Faye
       connection.errback do |reason|
         @server.error "Faye::Redis: #{name} connection failed: #{reason}"
       end
+    end
+
+    def inactivity_check_enabled?(inactivity_check)
+      inactivity_check[:trigger_secs] || inactivity_check[:response_timeout]
+    end
+
+    def configure_inactivity_check(connection, inactivity_check)
+      connection.configure_inactivity_check(inactivity_check[:trigger_secs], inactivity_check[:response_timeout])
     end
 
     def get_current_time

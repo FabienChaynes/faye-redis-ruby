@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name              = 'faye-redis'
-  s.version           = '0.3.3'
+  s.version           = '0.3.4'
   s.summary           = 'Redis backend engine for Faye'
   s.author            = 'James Coglan'
   s.email             = 'jcoglan@gmail.com'
@@ -14,7 +14,7 @@ Gem::Specification.new do |s|
             Dir.glob('lib/**/*.rb')
 
   s.add_dependency 'eventmachine', '>= 0.12.0'
-  s.add_dependency 'em-hiredis', '>= 0.2.0'
+  s.add_dependency 'em-hiredis', '>= 0.3.1'
   s.add_dependency 'multi_json', '>= 1.0.0'
 
   s.add_development_dependency 'rspec'
